@@ -6,6 +6,8 @@ Builds a key-to-capabilities index from pair-time options, then routes each
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 from aioesphomeapi import (
     AlarmControlPanelEntityState,
     BinarySensorState,
@@ -26,7 +28,6 @@ from aioesphomeapi import (
     ValveState,
     WaterHeaterState,
 )
-from homey.device import Device
 
 from homey_esphomedriver.esphome_util import debug_log
 from homey_esphomedriver.state.alarm_control_panel import (
@@ -81,6 +82,9 @@ from homey_esphomedriver.state.valve import (
 from homey_esphomedriver.state.water_heater import (
     WaterHeaterEntityStateUpdateHandler,
 )
+
+if TYPE_CHECKING:
+    from homey.device import Device
 
 
 class DeviceEntityStateHandler:

@@ -8,9 +8,10 @@ Color temperature uses the same module for mireds to Kelvin.
 from __future__ import annotations
 
 from collections.abc import Callable
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-from homey.device import Device
+if TYPE_CHECKING:
+    from homey.device import Device
 
 UnitConverter = Callable[[str, float], float]
 

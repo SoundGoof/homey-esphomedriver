@@ -6,11 +6,12 @@ import asyncio
 from typing import TYPE_CHECKING, Any
 
 from aioesphomeapi import EntityState
-from homey.device import Device
 
 from homey_esphomedriver.esphome_util import debug_log
 
 if TYPE_CHECKING:
+    from homey.device import Device
+
     from homey_esphomedriver.esphome_driver import EspHomeDriver
 
 
