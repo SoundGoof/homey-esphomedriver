@@ -79,8 +79,15 @@
       }
     }
 
-    $inputSsid.addEventListener('input', syncContinue);
-    $inputSsid.addEventListener('change', syncContinue);
+    // `change` alone misses a paste followed by a direct click on
+    // Continue: the click lands on a still-disabled button, and a
+    // disabled button gives no feedback at all. Defer the check a tick
+    // so the field is already updated when it runs.
+    ['input', 'change', 'paste', 'keyup', 'blur'].forEach(function (evt) {
+      $inputSsid.addEventListener(evt, function () {
+        setTimeout(syncContinue, 0);
+      });
+    });
     syncContinue();
     $inputSsid.addEventListener('keyup', function (event) {
       if (event.key === 'Enter' && $inputSsid.value.length > 0) {

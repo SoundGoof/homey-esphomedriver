@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import json
 import logging
-from collections.abc import Callable
+from collections.abc import Callable, Iterable
 from datetime import datetime
+from typing import Any
 
 from aioesphomeapi import (
     BadMACAddressAPIError,
@@ -19,6 +21,11 @@ from aioesphomeapi import (
     ResolveAPIError,
 )
 from aioesphomeapi.core import TimeoutAPIError
+
+from homey_esphomedriver.display_slots import (
+    MARKER_CAPABILITY as DISPLAY_MARKER_CAPABILITY,
+)
+from homey_esphomedriver.display_slots import DisplaySlots, has_slots
 
 _DEBUG_TRUE = frozenset({"true", "1"})
 _LIBRARY_LOGGERS = ("aioesphomeapi", "homey_esphomedriver")
@@ -234,3 +241,72 @@ def format_event_type(event_type: str) -> str:
 def _parse_iso8601(value: str) -> datetime:
     """Parse ESPHome text-sensor ISO8601 (``Z`` normalized for fromisoformat)."""
     return datetime.fromisoformat(value.replace("Z", "+00:00"))
+
+
+ACTION_MARKER_CAPABILITY = "esphome_action"
+"""Hidden capability that puts the action card only on nodes declaring actions."""
+
+
+def wanted_markers(
+    object_ids: Iterable[str],
+    *,
+    has_actions: bool,
+    slots: DisplaySlots,
+) -> list[str]:
+    """Flow ``$filter`` markers a node with these entities and actions needs.
+
+    One rule, because it is consulted from three places that must agree: pair
+    time, connect, and a live capability refresh. A refresh that does not know
+    about a marker plans to remove it, which silently unregisters every card
+    filtered on it.
+
+    Args:
+        object_ids: Entity object ids the node exposes.
+        has_actions: Whether the node declares any user-defined API action.
+        slots: Display-slot naming for the owning driver.
+    """
+    markers: list[str] = []
+    if has_actions:
+        markers.append(ACTION_MARKER_CAPABILITY)
+    if has_slots(object_ids, slots):
+        markers.append(DISPLAY_MARKER_CAPABILITY)
+    return markers
+
+
+def parse_action_arguments(raw: object) -> dict[str, Any]:
+    """Parse a Flow card's JSON argument field into an action payload.
+
+    The generic *Run an ESPHome action* card cannot know an action's variables
+    at compose time, so arguments arrive as one JSON object typed by the user.
+    Everything about that is fallible, so failures name the problem rather than
+    surfacing a bare ``JSONDecodeError`` in a Flow.
+
+    Args:
+        raw: The card's ``arguments`` value; ``None`` or blank means no
+            arguments, which is valid for actions that declare none.
+
+    Returns:
+        Argument values keyed by declared variable name. Values are left as
+        parsed; ``EspHomeClient.execute_action`` coerces them to the types the
+        node declared.
+
+    Raises:
+        ValueError: If the text is not valid JSON, or is not a JSON object.
+    """
+    if raw is None:
+        return {}
+    text = str(raw).strip()
+    if not text:
+        return {}
+    try:
+        parsed = json.loads(text)
+    except json.JSONDecodeError as err:
+        msg = f"Action arguments are not valid JSON: {err.msg} (position {err.pos})"
+        raise ValueError(msg) from err
+    if not isinstance(parsed, dict):
+        msg = (
+            "Action arguments must be a JSON object keyed by variable name, "
+            f"not {type(parsed).__name__}"
+        )
+        raise ValueError(msg)
+    return {str(key): value for key, value in parsed.items()}

@@ -206,3 +206,40 @@ def test_state_index_survives_null_capability_options() -> None:
     asyncio.run(state.init())
 
     assert state._key_to_capabilities == {1: ["onoff"], 2: ["measure_temperature"]}
+
+
+def test_markers_survive_a_refresh_when_the_desired_set_includes_them() -> None:
+    """A live refresh must not plan away the Flow ``$filter`` markers.
+
+    Markers carry no ``key``, so the planner matches them by id: any marker
+    missing from the desired set is removed, which unregisters every card
+    filtered on it. `_refresh_capabilities` therefore has to add them to the
+    scratch itself — `map_device` only knows about entities.
+    """
+    current: dict[str, dict[str, Any]] = {
+        "measure_temperature": {"key": 111},
+        "esphome_string.homey_t_headline": {"key": 222},
+        "esphome_string": {"uiComponent": None},
+        "esphome_display": {"uiComponent": None},
+        "esphome_action": {"uiComponent": None},
+    }
+    desired = dict(current)
+
+    to_remove, to_add, _to_update = plan_capability_refresh(current, desired)
+
+    assert to_remove == []
+    assert to_add == []
+
+
+def test_markers_left_out_of_the_desired_set_are_removed() -> None:
+    """Pins why the scratch must carry them: otherwise they are planned away."""
+    current: dict[str, dict[str, Any]] = {
+        "esphome_string": {"uiComponent": None},
+        "esphome_display": {"uiComponent": None},
+        "esphome_action": {"uiComponent": None},
+    }
+    desired: dict[str, dict[str, Any]] = {"esphome_string": {"uiComponent": None}}
+
+    to_remove, _to_add, _to_update = plan_capability_refresh(current, desired)
+
+    assert sorted(to_remove) == ["esphome_action", "esphome_display"]

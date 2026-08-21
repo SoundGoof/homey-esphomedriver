@@ -42,7 +42,7 @@ class DeviceCapabilityHandler:
     async def refresh(self, _value: Any = True, **_kwargs: Any) -> None:
         """Add/remove capabilities from a live remap; keep unchanged Homey ids."""
         device = self._device
-        entities, _services = await device._require_client().list_entities_services()
+        entities, services = await device._require_client().list_entities_services()
         scratch = DeviceEntityMapper.empty_option()
         DeviceEntityMapper.map_device(
             entities,
@@ -50,13 +50,35 @@ class DeviceCapabilityHandler:
             profile=device.brand_profile,
             diagnostics=device.get_setting("show_diagnostics"),
             configuration=device.get_setting("show_configuration"),
+            services=services,
         )
 
         to_remove, to_add, to_update = plan_capability_refresh(
             device._capabilities_options, scratch["capabilitiesOptions"]
         )
         added = dict(to_add)
-        await self._remove_capabilities(to_remove)
+        # The mirror of the removal filter below: a capability whose options
+        # Homey kept as null is planned as an update, but the capability itself
+        # is gone. Setting options on one the device does not have leaves it
+        # unregistered — and for a Flow marker that means its cards stay
+        # missing. Add those instead of updating them.
+        readd = {
+            capability_id: options
+            for capability_id, options in to_update
+            if not device.has_capability(capability_id)
+        }
+        added.update(readd)
+        to_update = [item for item in to_update if item[0] not in readd]
+        # Homey keeps a null options entry after a capability is removed, so
+        # the plan names it again on every later refresh. Only ask Homey to
+        # remove what the device still has.
+        await self._remove_capabilities(
+            [
+                capability_id
+                for capability_id in to_remove
+                if device.has_capability(capability_id)
+            ]
+        )
         await self._add_capabilities(list(added), added)
         for capability_id, options in to_update:
             await device.set_capability_options(capability_id, options)

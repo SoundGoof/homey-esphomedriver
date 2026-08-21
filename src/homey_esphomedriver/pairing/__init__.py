@@ -6,7 +6,12 @@ import asyncio
 from collections.abc import Awaitable, Callable
 from typing import TYPE_CHECKING, Any, cast
 
-from aioesphomeapi import DeviceInfo, EncryptionPlaintextAPIError, EntityInfo
+from aioesphomeapi import (
+    DeviceInfo,
+    EncryptionPlaintextAPIError,
+    EntityInfo,
+    UserService,
+)
 
 from homey_esphomedriver.entities.mapping import DeviceEntityMapper
 from homey_esphomedriver.esphome_client import (
@@ -299,10 +304,10 @@ class DriverPairHandler:
         """Probe and map; return next view id."""
 
         async def run() -> str:
-            info, entities, psk = await self._probe()
+            info, entities, services, psk = await self._probe()
             self.noise_psk = psk
             self.mapped_device = self._map_pair_payload(
-                info, entities, psk, expected_id=expected_id
+                info, entities, services, psk, expected_id=expected_id
             )
             return "add_device"
 
@@ -316,7 +321,7 @@ class DriverPairHandler:
         assert device is not None and expected_id is not None
 
         async def run() -> None:
-            info, _entities, psk = await self._probe()
+            info, _entities, _services, psk = await self._probe()
             self.noise_psk = psk
             if normalize_mac(info.mac_address) != normalize_mac(expected_id):
                 raise ValueError(self._t("errors.device_mismatch"))
@@ -348,7 +353,9 @@ class DriverPairHandler:
                 raise
             raise ValueError(self._t(error_key(err))) from err
 
-    async def _probe(self) -> tuple[DeviceInfo, list[EntityInfo], str | None]:
+    async def _probe(
+        self,
+    ) -> tuple[DeviceInfo, list[EntityInfo], list[UserService], str | None]:
         """Probe once; retry without PSK when the node is plaintext."""
         host = self.host
         if not host:
@@ -360,14 +367,14 @@ class DriverPairHandler:
                 f"Probing {host}:{self.port} encrypted={noise_psk is not None}"
             )
             try:
-                device_info, entities, _services = await probe_esphome_device(
+                device_info, entities, services = await probe_esphome_device(
                     host,
                     self.port,
                     noise_psk=noise_psk,
                     client_info=self._driver.brand_profile.client_info,
                     debug=self._driver.debug,
                 )
-                return device_info, entities, noise_psk
+                return device_info, entities, services, noise_psk
             except EncryptionPlaintextAPIError:
                 if not noise_psk:
                     raise
@@ -377,6 +384,7 @@ class DriverPairHandler:
         self,
         device_info: DeviceInfo,
         entities: list[EntityInfo],
+        services: list[UserService],
         noise_psk: str | None,
         *,
         expected_id: str | None,
@@ -404,7 +412,10 @@ class DriverPairHandler:
             data_id=data_id,
         )
         DeviceEntityMapper.map_device(
-            entities, homey_device, profile=self._driver.brand_profile
+            entities,
+            homey_device,
+            profile=self._driver.brand_profile,
+            services=services,
         )
 
         if not homey_device.get("class"):

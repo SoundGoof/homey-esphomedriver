@@ -187,3 +187,20 @@ def test_replace_returns_a_modified_copy() -> None:
 
 def test_after_map_default_is_a_noop() -> None:
     assert DEFAULT_BRAND_PROFILE.after_map([entity("relay")], None) is None
+
+
+class TestSettingEntities:
+    """Maps a statically-declared Homey setting onto an ESPHome entity."""
+
+    def test_absent_by_default(self) -> None:
+        assert BrandProfile.from_compose({}).setting_entities == {}
+
+    def test_camel_and_snake_case_keys(self) -> None:
+        camel = BrandProfile.from_compose(
+            {"settingEntities": {"temperature_offset": "temp_offset"}}
+        )
+        snake = BrandProfile.from_compose(
+            {"setting_entities": {"temperature_offset": "temp_offset"}}
+        )
+        assert camel.setting_entities == {"temperature_offset": "temp_offset"}
+        assert snake.setting_entities == camel.setting_entities

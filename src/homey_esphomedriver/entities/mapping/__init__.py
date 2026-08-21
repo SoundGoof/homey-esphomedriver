@@ -39,7 +39,10 @@ from aioesphomeapi import (
 )
 
 from homey_esphomedriver.esphome_types import HomeyEspHomeDeviceOption
-from homey_esphomedriver.esphome_util import device_info_settings
+from homey_esphomedriver.esphome_util import (
+    device_info_settings,
+    wanted_markers,
+)
 from homey_esphomedriver.profile import DEFAULT_BRAND_PROFILE, BrandProfile
 
 REFRESH_CAPABILITY = "button.refresh"
@@ -317,8 +320,19 @@ class DeviceEntityMapper:
         diagnostics: bool = False,
         configuration: bool = False,
         profile: BrandProfile | None = None,
+        services: Sequence[Any] = (),
     ) -> None:
-        """Fill a pair-time payload, including ``button.refresh``."""
+        """Fill a pair-time payload, including ``button.refresh`` and markers.
+
+        Args:
+            entities: Native API entity infos from the node.
+            homey_device: Pair-time device payload to mutate.
+            diagnostics: Also map diagnostic-category entities.
+            configuration: Also map configuration-category entities.
+            profile: Brand remaps and filters. Defaults to accept-all.
+            services: User-defined API actions the node declares. Only their
+                presence matters, and only for the action marker.
+        """
         cls.map(entities, homey_device, profile=profile)
         if diagnostics:
             cls.map(
@@ -338,6 +352,19 @@ class DeviceEntityMapper:
         homey_device["capabilitiesOptions"][REFRESH_CAPABILITY] = dict(
             REFRESH_CAPABILITY_OPTIONS
         )
+        # Markers belong to the same fill: pairing and Refresh both call this,
+        # and a marker only one of them knows about is one the other plans away.
+        object_ids = [
+            object_id
+            for entity in entities
+            if (object_id := getattr(entity, "object_id", None)) is not None
+        ]
+        for marker in wanted_markers(
+            object_ids,
+            has_actions=bool(services),
+            slots=(profile or DEFAULT_BRAND_PROFILE).display_slots,
+        ):
+            cls.add_marker(homey_device, marker)
 
     @staticmethod
     def _should_skip(
@@ -401,11 +428,23 @@ class DeviceEntityMapper:
         card for a dummy bare ``button``.
         """
         marker = "esphome_button" if base == "button" else base
-        if marker not in homey_device["capabilities"]:
-            homey_device["capabilities"].append(marker)
-            homey_device["capabilitiesOptions"][marker] = {"uiComponent": None}
+        cls.add_marker(homey_device, marker)
         suffix = _current_entity.object_id if _current_entity is not None else base
         cls.add_capability(homey_device, key, f"{base}.{suffix}", capability_options)
+
+    @staticmethod
+    def add_marker(
+        homey_device: HomeyEspHomeDeviceOption,
+        capability_id: str,
+    ) -> None:
+        """Add a hidden capability that exists only for a Flow ``$filter``.
+
+        Homey matches ``$filter`` against exact capability ids, so a card that
+        applies to a whole feature needs one bare id to match on.
+        """
+        if capability_id not in homey_device["capabilities"]:
+            homey_device["capabilities"].append(capability_id)
+            homey_device["capabilitiesOptions"][capability_id] = {"uiComponent": None}
 
     @staticmethod
     def add_capability(

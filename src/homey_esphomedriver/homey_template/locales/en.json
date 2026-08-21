@@ -74,7 +74,8 @@
       "not_ready": "The device is not ready for Wi-Fi setup.",
       "ssid_too_long": "SSID or password is too long",
       "invalid_value": "Improv device sent an invalid value"
-    }
+    },
+    "unknown_action": "This ESPHome device has no action named \"__action__\". Check api: actions: in its YAML."
   },
   "nativeAppSuggestion": "Good news! This device has its own app! Search in the Homey App Store for __appName__."
 }

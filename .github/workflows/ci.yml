@@ -24,7 +24,9 @@ jobs:
         run: python3 .github/scripts/check_version_sync.py
 
       - name: Ruff
-        run: ruff check src
+        run: |
+          ruff check .
+          ruff format --check .
 
       - name: Pytest
         if: hashFiles('tests/**/*.py') != ''

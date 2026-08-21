@@ -73,7 +73,11 @@ Normally there is one Homey driver per product SKU. Product filters go on that d
 | `hiddenEntities`         | Hide things like status LEDs, OTA helpers or duplicate sensors                                                    |
 | `deviceEntities`         | Map VOC, NOx, PM and similar entities to proper Homey capabilities instead of generic gauges                      |
 | `deviceClassOverrides`   | Force a Homey device class such as socket, sensor or speaker                                                      |
+| `settingEntities`        | Map a settings-page field onto an ESPHome entity, so writing the setting writes the entity                        |
+| `displaySlots`           | Naming for the Homey display-slot convention; defaults match the documented convention                            |
 
+
+`settingEntities` exists because Homey device settings are declared statically in `driver.compose.json` — there is no API to add a field per device at pair time. A driver written for a known product can therefore declare the field itself and name the entity it configures, and core writes that entity whenever the setting changes. Configuration entities (`entity_category: config` on the node) are the motivating case: a calibration offset belongs beside Host and Port rather than on the device tile. The generic `io.esphome` driver cannot use this, since it does not know in advance what it will pair with.
 
 If both `projects` and `projectPrefix` are configured, a match on either is enough.
 
@@ -101,6 +105,8 @@ Everything else, including pairing, mapping and reconnect logic, stays inside th
 On `EspHomeDevice`, `on_esphome_init(client)` runs after capability listeners are registered and `_ensure_client_started()` has run. `client` is `None` when the node has no host yet (waiting on mDNS). Use the public `client` property to read the session later; command paths still use `_require_client()` when a live connection is required.
 
 `on_esphome_connected(client)` runs at the end of each successful login (including reconnects), after Homey `set_available()`. The session is still not READY when the hook runs — `_mark_ready()` happens after `_on_connected` returns — so brand code must not issue commands until `client.available` / `_require_client()`.
+
+`on_esphome_init` fires once at device init and so cannot re-register per-connection state; use `on_esphome_connected` for anything the node discards on a drop. The user-defined action list is the motivating case: `EspHomeClient` rebuilds its action cache on each connect, and a node reflashed while paired may declare a different set.
 
 ### What the brand owns vs what core owns
 

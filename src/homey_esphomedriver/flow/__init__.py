@@ -5,6 +5,10 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import TYPE_CHECKING, Any
 
+from homey_esphomedriver.display_slots import autocomplete_rows
+from homey_esphomedriver.esphome_util import parse_action_arguments
+from homey_esphomedriver.units import base_unit, is_measurement
+
 if TYPE_CHECKING:
     from homey_esphomedriver.esphome_driver import EspHomeDriver
 
@@ -95,6 +99,32 @@ class DriverFlowHandler:
             flow.get_action_card("esphome_button_press"),
             self._esphome_button_press,
             name=self._autocomplete_sub("button"),
+        )
+
+        self._wire_card(
+            flow.get_action_card("esphome_action_run"),
+            self._esphome_action_run,
+            action=self._action_autocomplete,
+        )
+        self._wire_card(
+            flow.get_action_card("esphome_display_text_set"),
+            self._display_text_set,
+            slot=self._display_text_slot_autocomplete,
+        )
+        self._wire_card(
+            flow.get_action_card("esphome_display_number_set"),
+            self._display_number_set,
+            slot=self._display_number_slot_autocomplete,
+        )
+        self._wire_card(
+            flow.get_action_card("esphome_display_value_set"),
+            self._display_value_set,
+            slot=self._display_number_slot_autocomplete,
+            capability=self._source_capability_autocomplete,
+        )
+        self._wire_card(
+            flow.get_action_card("esphome_display_refresh"),
+            self._display_refresh,
         )
 
         self._condition_on("alarm_plugged_in_is", "alarm_plugged_in")
@@ -211,6 +241,81 @@ class DriverFlowHandler:
 
         self._driver.homey.flow.get_action_card(card_id).register_run_listener(run)
 
+    async def _action_autocomplete(
+        self,
+        query: str,
+        **args: Any,
+    ) -> list[dict[str, str]]:
+        """Offer the node's user-defined actions, filtered by the typed query.
+
+        The list is per-connection and empty while the node is offline, so an
+        offline device shows no options rather than a stale set.
+        """
+        needle = query.casefold()
+        return [
+            {"id": name, "name": name}
+            for name in args["device"].esphome_actions()
+            if needle in name.casefold()
+        ]
+
+    async def _source_capability_autocomplete(
+        self,
+        query: str,
+        **args: Any,
+    ) -> list[dict[str, str]]:
+        """Offer the numeric capabilities of the device chosen in this card.
+
+        Homey passes the arguments filled in so far, so the list narrows to the
+        selected source. Readings are offered whether or not Homey defines a
+        unit for them — a handful pass their value through in the node's own
+        unit — and the label is appended only when there is one to append.
+        """
+        source = args.get("source")
+        if source is None:
+            return []
+
+        needle = query.casefold()
+        rows = []
+        for capability_id in source.get_capabilities():
+            if not is_measurement(capability_id):
+                continue
+            unit = base_unit(capability_id)
+            name = f"{capability_id} ({unit})" if unit else capability_id
+            if needle in name.casefold():
+                rows.append({"id": capability_id, "name": name})
+        return sorted(rows, key=lambda row: row["name"])
+
+    async def _display_text_slot_autocomplete(
+        self,
+        query: str,
+        **args: Any,
+    ) -> list[dict[str, str]]:
+        """Offer the node's text display slots."""
+        return self._display_slot_autocomplete(args["device"], "text", query)
+
+    async def _display_number_slot_autocomplete(
+        self,
+        query: str,
+        **args: Any,
+    ) -> list[dict[str, str]]:
+        """Offer the node's numeric display slots."""
+        return self._display_slot_autocomplete(args["device"], "number", query)
+
+    def _display_slot_autocomplete(
+        self,
+        device: Any,
+        kind: str,
+        query: str,
+    ) -> list[dict[str, str]]:
+        """Filter a device's slots of one kind by the typed query.
+
+        Slots come from the node's entity list rather than Homey capabilities:
+        they are hidden from the tile, so they are not capabilities here.
+        """
+        slots = device.display_slots_config
+        prefix = slots.text_prefix if kind == "text" else slots.number_prefix
+        return autocomplete_rows(device.display_slots(kind), prefix, query)
+
     @staticmethod
     def _flow_value_is(device: Any, capability_id: str, value: Any) -> bool:
         """Compare a Flow argument to the live capability; empty args never match."""
@@ -246,6 +351,28 @@ class DriverFlowHandler:
             "fan_oscillate",
             not device.get_capability_value("fan_oscillate"),
         )
+
+    async def _esphome_action_run(self, args: dict[str, Any], **_kwargs: Any) -> Any:
+        return await args["device"].run_esphome_action(
+            args["action"]["id"],
+            parse_action_arguments(args.get("arguments")),
+        )
+
+    async def _display_text_set(self, args: dict[str, Any], **_kwargs: Any) -> Any:
+        args["device"].set_display_slot(args["slot"]["id"], args["value"], kind="text")
+
+    async def _display_number_set(self, args: dict[str, Any], **_kwargs: Any) -> Any:
+        args["device"].set_display_slot(
+            args["slot"]["id"], args["value"], kind="number"
+        )
+
+    async def _display_value_set(self, args: dict[str, Any], **_kwargs: Any) -> Any:
+        return await args["device"].set_display_slot_from_capability(
+            args["slot"]["id"], args["source"], args["capability"]["id"]
+        )
+
+    async def _display_refresh(self, args: dict[str, Any], **_kwargs: Any) -> Any:
+        return await args["device"].refresh_display()
 
     async def _esphome_number_set(self, args: dict[str, Any], **_kwargs: Any) -> Any:
         return await args["device"].trigger_capability_listener(

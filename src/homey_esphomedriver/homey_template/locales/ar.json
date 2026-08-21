@@ -74,7 +74,8 @@
       "not_ready": "الجهاز غير جاهز بعد لإعداد Wi-Fi.",
       "ssid_too_long": "SSID أو كلمة المرور طويلة جداً",
       "invalid_value": "أرسل جهاز Improv قيمة غير صالحة"
-    }
+    },
+    "unknown_action": "This ESPHome device has no action named \"__action__\". Check api: actions: in its YAML."
   },
   "nativeAppSuggestion": "أخبار سارة! لهذا الجهاز تطبيق خاص به! ابحث في Homey App Store عن __appName__."
 }

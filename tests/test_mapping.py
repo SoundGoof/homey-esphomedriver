@@ -15,6 +15,7 @@ from aioesphomeapi import (
     EntityCategory,
     EntityInfo,
     TemperatureUnit,
+    TextSensorInfo,
 )
 
 from homey_esphomedriver.entities.mapping import (
@@ -239,7 +240,7 @@ def test_suffixed_custom_cap_adds_hidden_flow_filter_marker() -> None:
 
 
 def test_button_entity_adds_custom_flow_filter_marker() -> None:
-    """Bare ``esphome_button`` exists only so Homey ``$filter`` can match ``button.*``."""
+    """Bare ``esphome_button`` exists only so ``$filter`` can match ``button.*``."""
     homey_device = mapped_device(
         ButtonInfo(object_id="press_me", key=1, name="Press"),
         ButtonInfo(object_id="reset", key=2, name="Reset"),
@@ -279,3 +280,79 @@ def test_map_device_includes_diagnostic_entities() -> None:
         "esphome_boolean.status",
         REFRESH_CAPABILITY,
     ]
+
+
+def test_add_marker_is_idempotent() -> None:
+    """Two slots on one node must not list the marker twice."""
+    homey_device = mapped_device()
+    DeviceEntityMapper.add_marker(homey_device, "esphome_display")
+    DeviceEntityMapper.add_marker(homey_device, "esphome_display")
+    assert homey_device["capabilities"] == ["esphome_display"]
+    assert homey_device["capabilitiesOptions"]["esphome_display"] == {
+        "uiComponent": None
+    }
+
+
+def test_map_device_emits_the_flow_markers() -> None:
+    """Pairing and Refresh share this fill, so markers must come from it.
+
+    A marker only one of the two knows about is one the other plans away: the
+    refresh planner matches keyless capabilities by id and removes anything
+    missing from the desired set.
+    """
+    homey_device = mapped_device()
+    DeviceEntityMapper.map_device(
+        [TextSensorInfo(object_id="homey_t_headline", key=1, name="headline")],
+        homey_device,
+        services=[object()],
+    )
+    assert "esphome_display" in homey_device["capabilities"]
+    assert "esphome_action" in homey_device["capabilities"]
+    assert homey_device["capabilitiesOptions"]["esphome_display"] == {
+        "uiComponent": None
+    }
+
+
+def test_map_device_emits_no_markers_for_a_plain_node() -> None:
+    homey_device = mapped_device()
+    DeviceEntityMapper.map_device(
+        [TextSensorInfo(object_id="uptime", key=1, name="Uptime")],
+        homey_device,
+    )
+    assert "esphome_display" not in homey_device["capabilities"]
+    assert "esphome_action" not in homey_device["capabilities"]
+
+
+def test_pair_and_refresh_agree_on_markers() -> None:
+    """Both callers of `map_device` must pass the node's service list.
+
+    Markers are derived from it, and the refresh planner removes a keyless
+    capability the desired set does not name — so a pair path that drops
+    `services` registers the cards and a refresh then deletes them. Both call
+    sites have gone missing across refactors, hence the check on the source.
+    """
+    import pathlib
+
+    def call_args(source: str) -> str:
+        """The argument text of the `map_device(` call, parentheses balanced."""
+        i = source.index("map_device(") + len("map_device(")
+        depth, out = 1, []
+        for ch in source[i:]:
+            if ch == "(":
+                depth += 1
+            elif ch == ")":
+                depth -= 1
+                if depth == 0:
+                    break
+            out.append(ch)
+        return "".join(out)
+
+    root = (
+        pathlib.Path(__file__).resolve().parent.parent / "src" / "homey_esphomedriver"
+    )
+    for where in ("pairing/__init__.py", "capabilities/__init__.py"):
+        source = (root / where).read_text()
+        assert "map_device(" in source, f"{where} no longer calls map_device"
+        assert "services=" in call_args(source), (
+            f"{where} calls map_device without services"
+        )

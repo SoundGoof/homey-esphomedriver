@@ -1,0 +1,10 @@
+{
+  "type": "boolean",
+  "title": {
+    "en": "ESPHome action"
+  },
+  "getable": false,
+  "setable": true,
+  "uiComponent": null,
+  "icon": "/assets/capabilities/event_generic.svg"
+}
