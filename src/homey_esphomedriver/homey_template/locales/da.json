@@ -74,7 +74,8 @@
       "not_ready": "Enheden er endnu ikke klar til Wi-Fi-opsætning.",
       "ssid_too_long": "SSID eller adgangskode er for lang",
       "invalid_value": "Improv-enheden sendte en ugyldig værdi"
-    }
+    },
+    "unknown_action": "This ESPHome device has no action named \"__action__\". Check api: actions: in its YAML."
   },
   "nativeAppSuggestion": "Gode nyheder! Denne enhed har sin egen app! Søg i Homey App Store efter __appName__."
 }

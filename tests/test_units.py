@@ -12,6 +12,9 @@ from typing import Any
 import pytest
 
 from homey_esphomedriver.units import (
+    _BASE_UNITS,
+    _CONVERTERS,
+    base_unit,
     convert_absolute_humidity,
     convert_apparent_power,
     convert_area,
@@ -45,6 +48,7 @@ from homey_esphomedriver.units import (
     convert_volume_m3,
     convert_water_flow,
     convert_weight,
+    is_measurement,
     kelvin_to_mireds,
     mireds_to_kelvin,
 )
@@ -344,3 +348,123 @@ class TestImportableOffDevice:
         import importlib
 
         assert importlib.import_module(module) is not None
+
+
+class TestBaseUnit:
+    """The unit a Flow can label a slot with, without the user typing one."""
+
+    @pytest.mark.parametrize(
+        ("capability_id", "expected"),
+        [
+            ("measure_temperature", "\u00b0C"),
+            ("measure_humidity", "%"),
+            ("measure_battery", "%"),
+            ("measure_battery_voltage", "V"),
+            # an index suffix names the same quantity, so the unit is the same
+            ("measure_temperature.outside_temperature", "\u00b0C"),
+            # capabilities that are not a measurement have no unit to offer
+            ("onoff", ""),
+            ("locked", ""),
+        ],
+    )
+    def test_base_unit(self, capability_id: str, expected: str) -> None:
+        assert base_unit(capability_id) == expected
+
+
+class TestMeasurementFilter:
+    """The display-slot picker offers readings, not every capability.
+
+    A unit was standing in for "is a reading", which hid the passthrough
+    capabilities: they report in the node's own unit, so they have no base
+    unit, but they are still numbers a Flow can put on a screen.
+    """
+
+    @pytest.mark.parametrize(
+        "capability_id",
+        [
+            "measure_temperature",
+            "measure_battery",
+            "measure_co",
+            "measure_o3",
+            "measure_pm25",
+            "measure_distance.range",
+        ],
+    )
+    def test_readings_are_offered(self, capability_id: str) -> None:
+        assert is_measurement(capability_id) is True
+
+    @pytest.mark.parametrize("capability_id", ["onoff", "locked", "esphome_string"])
+    def test_non_readings_are_not(self, capability_id: str) -> None:
+        assert is_measurement(capability_id) is False
+
+    def test_every_converter_is_a_measurement(self) -> None:
+        """Nothing this package converts may be filtered out of the picker."""
+        for capability_id in _CONVERTERS:
+            assert is_measurement(capability_id) is True
+
+    def test_every_capability_with_a_unit_is_a_measurement(self) -> None:
+        for capability_id in _BASE_UNITS:
+            assert is_measurement(capability_id) is True
+
+    @pytest.mark.parametrize(
+        "capability_id",
+        ["measure_aqi", "measure_ph", "measure_tvoc", "measure_monetary"],
+    )
+    def test_unitless_homey_readings_are_offered(self, capability_id: str) -> None:
+        """Homey defines the unit for these; this package never converts them."""
+        assert is_measurement(capability_id) is True
+        assert base_unit(capability_id) == ""
+
+    @pytest.mark.parametrize(
+        ("capability_id", "expected"),
+        [
+            ("measure_area", "m²"),
+            ("measure_duration", "s"),
+            ("measure_weight", "g"),
+            ("measure_irradiance", "W/m²"),
+            ("meter_reactive_energy", "varh"),
+            # normalized by an if-style converter rather than match/case
+            ("measure_co", "ppm"),
+            ("measure_o3", "μg/m³"),
+        ],
+    )
+    def test_base_units_added_for_convertible_readings(
+        self, capability_id: str, expected: str
+    ) -> None:
+        assert base_unit(capability_id) == expected
+
+
+def test_every_converted_capability_has_a_base_unit() -> None:
+    """A converter normalizes to one unit, so the slot label must not be blank.
+
+    No exceptions: every converter in this module documents the unit it
+    normalizes to, so a missing entry here means the display writes an empty
+    label for a unit the code already knows.
+    """
+    missing = sorted(set(_CONVERTERS) - set(_BASE_UNITS))
+    assert missing == []
+
+
+def test_no_string_typed_measurement_is_offered_as_a_reading() -> None:
+    """A slot coerces to float, so a text ``measure_*`` must not be offerable.
+
+    Scans the shipped capability definitions rather than trusting the list, so
+    a new string-typed one added later fails here instead of failing on the
+    panel at flush time.
+    """
+    import json
+    from importlib.resources import files
+
+    root = files("homey_esphomedriver").joinpath("homey_template/compose/capabilities")
+    offered_but_not_numeric = []
+    for entry in root.iterdir():
+        if not entry.name.endswith(".json"):
+            continue
+        capability_id = entry.name.removesuffix(".json")
+        if not is_measurement(capability_id):
+            continue
+        declared = json.loads(entry.read_text(encoding="utf-8")).get("type")
+        if declared != "number":
+            offered_but_not_numeric.append((capability_id, declared))
+
+    assert offered_but_not_numeric == []

@@ -675,3 +675,97 @@ def _get_converter(capability_id: str) -> UnitConverter:
 
 def _identity(_unit: str, value: float) -> float:
     return value
+
+
+# The unit a capability's value carries once `convert_units` has normalized it.
+# Homey defines a base unit per capability, so this is a property of the
+# capability rather than of any device, and a Flow writing a reading to a
+# display slot can label it without the user typing a unit by hand.
+_BASE_UNITS: dict[str, str] = {
+    "measure_absolute_humidity": "g/m³",
+    "measure_apparent_power": "VA",
+    "measure_area": "m²",
+    "measure_battery": "%",
+    "measure_battery_voltage": "V",
+    "measure_blood_glucose": "mg/dL",
+    "measure_co": "ppm",
+    "measure_co2": "ppm",
+    "measure_conductivity": "µS/cm",
+    "measure_content_volume": "L",
+    "measure_current": "A",
+    "measure_data_rate": "bit/s",
+    "measure_data_size": "B",
+    "measure_dew_point": "\u00b0C",
+    "measure_distance": "m",
+    "measure_duration": "s",
+    "measure_energy_distance": "kWh/100km",
+    "measure_frequency": "Hz",
+    "measure_gust_strength": "km/h",
+    "measure_humidity": "%",
+    "measure_irradiance": "W/m²",
+    "measure_luminance": "lx",
+    "measure_noise": "dB",
+    "measure_o3": "μg/m³",
+    "measure_pm4": "μg/m³",
+    "measure_power": "W",
+    "measure_pressure": "mbar",
+    "measure_rain": "mm",
+    "measure_rain_intensity": "mm/h",
+    "measure_reactive_power": "var",
+    "measure_signal_strength": "dBm",
+    "measure_so2": "μg/m³",
+    "measure_speed": "m/s",
+    "measure_temperature": "\u00b0C",
+    "measure_voltage": "V",
+    "measure_water": "L/min",
+    "measure_weight": "g",
+    "measure_wind_angle": "\u00b0",
+    "measure_wind_strength": "km/h",
+    "meter_gas": "m\u00b3",
+    "meter_power": "kWh",
+    "meter_reactive_energy": "varh",
+    "meter_water": "m\u00b3",
+}
+
+
+_NON_NUMERIC_MEASUREMENTS = frozenset(
+    {
+        "measure_date",
+        "measure_timestamp",
+        "measure_uptime",
+    }
+)
+"""``measure_*`` capabilities this package defines as ``string``.
+
+The naming rule says a `measure_` capability is a reading, and for Homey's own
+capabilities that holds. These three are ours and carry text, so a slot fed
+from one would fail the numeric coercion on every flush.
+"""
+
+
+def is_measurement(capability_id: str) -> bool:
+    """Whether this capability carries a numeric reading Homey can normalize.
+
+    A unit is too narrow a test. `measure_co`, `measure_o3` and `measure_so2`
+    pass their value through in whatever unit the node reports, and Homey
+    defines a dozen more — `measure_pm25`, `measure_aqi`, `measure_ph` — whose
+    unit this package never has to know because it never converts them. All of
+    them are still numbers a Flow can put on a screen.
+
+    Homey's own naming is the reliable signal: a reading is a `measure_` or
+    `meter_` capability. That excludes `onoff`, `locked` and `esphome_string`,
+    which is what the unit check was standing in for.
+    """
+    base = capability_id.split(".", 1)[0]
+    if base in _NON_NUMERIC_MEASUREMENTS:
+        return False
+    return base.startswith(("measure_", "meter_"))
+
+
+def base_unit(capability_id: str) -> str:
+    """Return the unit a capability's converted value is in, or "" if unknown.
+
+    Index suffixes are ignored, so ``measure_temperature.outside`` reports the
+    same unit as ``measure_temperature``.
+    """
+    return _BASE_UNITS.get(capability_id.split(".", 1)[0], "")

@@ -25,6 +25,7 @@ from aioesphomeapi import (
     EntityState,
     ReconnectLogic,
     UserService,
+    UserServiceArgType,
 )
 
 from homey_esphomedriver.esphome_util import (
@@ -40,6 +41,46 @@ DEFAULT_API_PORT = 6053
 """ESPHome native API port used when discovery omits it."""
 
 StateCallback = Callable[[EntityState], Awaitable[None]]
+
+
+def _coerce_bool(value: Any) -> bool:
+    """Read a declared ``bool`` argument, including Flow's string form.
+
+    ``bool("false")`` is ``True``, so a typed-in "false" would switch a node
+    setting on. Only the spellings a user can reasonably mean are accepted;
+    anything else is a ValueError rather than a silent truthy value.
+    """
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, (int, float)):
+        return bool(value)
+    text = str(value).strip().casefold()
+    if text in {"true", "1", "yes", "on"}:
+        return True
+    if text in {"false", "0", "no", "off", ""}:
+        return False
+    msg = f"Cannot read {value!r} as a boolean"
+    raise ValueError(msg)
+
+
+_ARG_COERCERS: dict[UserServiceArgType, Callable[[Any], Any]] = {
+    UserServiceArgType.BOOL: _coerce_bool,
+    UserServiceArgType.INT: int,
+    UserServiceArgType.FLOAT: float,
+    UserServiceArgType.STRING: str,
+    UserServiceArgType.BOOL_ARRAY: lambda v: [_coerce_bool(i) for i in v],
+    UserServiceArgType.INT_ARRAY: lambda v: [int(i) for i in v],
+    UserServiceArgType.FLOAT_ARRAY: lambda v: [float(i) for i in v],
+    UserServiceArgType.STRING_ARRAY: lambda v: [str(i) for i in v],
+}
+"""Coercion per declared ``UserService`` argument type.
+
+Homey Flow-card inputs arrive as strings regardless of the ESPHome variable
+type, so values are coerced to what the node declared rather than passed
+through; aioesphomeapi serialises by declared type and a mismatch is rejected
+at the node.
+"""
+
 DebugCallback = Callable[..., None]
 
 
@@ -72,6 +113,7 @@ class EspHomeClient:
         on_connected: Callable[[DeviceInfo], Awaitable[None]] | None = None,
         on_disconnected: Callable[[bool], Awaitable[None]] | None = None,
         on_connect_error: Callable[[Exception], Awaitable[None]] | None = None,
+        on_ready: Callable[[], Awaitable[None]] | None = None,
     ) -> None:
         """Create a session for one ESPHome node.
 
@@ -83,6 +125,11 @@ class EspHomeClient:
             expected_mac: Paired MAC; a mismatch stops reconnect at that address.
             client_info: Name shown on the node for this Homey client.
             deep_sleep: Treat disconnects as expected while the node is sleeping.
+            on_connected: Awaited after each login, before commands are allowed.
+            on_disconnected: Awaited when a live session drops.
+            on_connect_error: Awaited when a connection attempt fails.
+            on_ready: Awaited once the session accepts commands, after
+                ``on_connected`` returned with the session still up.
         """
         if not host:
             raise ValueError("ESPHome host is required")
@@ -97,12 +144,15 @@ class EspHomeClient:
         self._on_connected = on_connected
         self._on_disconnected = on_disconnected
         self._on_connect_error = on_connect_error
+        self._on_ready = on_ready
 
         self._on_state: StateCallback | None = None
         self._cli: APIClient | None = None
         self._reconnect: ReconnectLogic | None = None
         self._device_info: DeviceInfo | None = None
         self._state = SessionState.DISCONNECTED
+        self._services: dict[str, UserService] = {}
+        self._entities_by_object_id: dict[str, EntityInfo] = {}
 
     @property
     def host(self) -> str:
@@ -204,6 +254,89 @@ class EspHomeClient:
         """List entities on the current connection."""
         return await self.api.list_entities_services()
 
+    @property
+    def actions(self) -> tuple[str, ...]:
+        """Names of the node's user-defined API actions, sorted.
+
+        Empty while disconnected: the cache is rebuilt on each connect.
+        """
+        return tuple(sorted(self._services))
+
+    @property
+    def entity_object_ids(self) -> tuple[str, ...]:
+        """Object ids the node exposes over the API; empty while disconnected.
+
+        Includes entities Homey hides from the device tile, which is what makes
+        display slots discoverable: they are deliberately not ``internal:``, as
+        ESPHome omits internal entities from the API entirely.
+        """
+        return tuple(self._entities_by_object_id)
+
+    def entity_info(self, object_id: str) -> EntityInfo | None:
+        """Return the entity info for an object id, or ``None`` if absent.
+
+        Commands address entities by key, but a driver profile names them by
+        object id, the stable identifier a YAML author controls. The info
+        rather than the key alone, because the command depends on the domain.
+        """
+        return self._entities_by_object_id.get(object_id)
+
+    async def execute_action(self, name: str, data: dict[str, Any]) -> None:
+        """Invoke a user-defined API action on the node.
+
+        ESPHome's ``display:`` is not a native API entity, so actions are the
+        only way to push a value to a screen. Arguments are coerced to the
+        types the node declared.
+
+        Args:
+            name: Action name as declared under ESPHome ``api: actions:``.
+            data: Argument values keyed by declared variable name.
+
+        Raises:
+            KeyError: If the node did not declare an action with that name.
+            ValueError: If an argument is missing, or a value cannot be coerced
+                to its declared type.
+            APIConnectionError: If the session is not ready for commands.
+        """
+        # The action list is per-connection and cleared on disconnect, so an
+        # unready session would raise `KeyError` here and be reported as a
+        # missing action — sending the user to look for a YAML typo that is
+        # not there. `command()` gates the same way.
+        if self._state is not SessionState.READY:
+            raise APIConnectionError(
+                f"ESPHome session for {self._host}:{self._port} is not ready"
+            )
+        service = self._services.get(name)
+        if service is None:
+            raise KeyError(name)
+
+        # aioesphomeapi indexes `data` by every declared argument, so a missing
+        # one raises a bare KeyError that reads exactly like an unknown action.
+        missing = [arg.name for arg in service.args if arg.name not in data]
+        if missing:
+            names = ", ".join(repr(item) for item in missing)
+            msg = f"Action {name!r} needs argument(s) {names}"
+            raise ValueError(msg)
+
+        payload: dict[str, Any] = {}
+        for arg in service.args:
+            coerce = _ARG_COERCERS.get(arg.type)
+            value = data[arg.name]
+            if coerce is None:
+                payload[arg.name] = value
+                continue
+            try:
+                payload[arg.name] = coerce(value)
+            except (TypeError, ValueError) as err:
+                msg = (
+                    f"Cannot coerce {value!r} for argument {arg.name!r} "
+                    f"of action {name!r} to {arg.type.name}"
+                )
+                raise ValueError(msg) from err
+
+        # Must be awaited: a non-awaited call sends nothing and raises nothing.
+        await self.api.execute_service(service, payload)
+
     def _create_client(self) -> APIClient:
         """Build a fresh APIClient from the current endpoint settings."""
         return APIClient(
@@ -238,6 +371,8 @@ class EspHomeClient:
         reconnect = self._reconnect
         self._reconnect = None
         self._state = SessionState.DISCONNECTED
+        self._services = {}
+        self._entities_by_object_id = {}
 
         if reconnect is not None:
             await reconnect.stop()
@@ -250,8 +385,15 @@ class EspHomeClient:
         """Re-subscribe and refresh device info whenever ReconnectLogic logs in."""
         cli = self.api
         try:
-            device_info, _, _ = await cli.device_info_and_list_entities()
+            device_info, entities, services = await cli.device_info_and_list_entities()
             self._device_info = device_info
+            # Actions and entities are per-connection: the node may be
+            # reflashed with a different set while paired, so rebuild rather
+            # than merge.
+            self._services = {service.name: service for service in services}
+            self._entities_by_object_id = {
+                entity.object_id: entity for entity in entities
+            }
             self._name = device_info.name
             self._deep_sleep = device_info.has_deep_sleep
             reconnect = self._reconnect
@@ -270,9 +412,13 @@ class EspHomeClient:
         if self._on_connected is not None:
             await self._on_connected(device_info)
         self._mark_ready()
+        if self._state is SessionState.READY and self._on_ready is not None:
+            await self._on_ready()
 
     async def _handle_disconnect(self, expected_disconnect: bool) -> None:
         self._state = SessionState.DISCONNECTED
+        self._services = {}
+        self._entities_by_object_id = {}
         # Stopping the session closes the socket; that is not a Homey unavailable.
         if self._on_state is None:
             return

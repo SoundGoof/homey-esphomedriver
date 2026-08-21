@@ -2445,6 +2445,143 @@
           "type": "autocomplete"
         }
       ]
+    },
+    {
+      "id": "esphome_action_run",
+      "title": {
+        "en": "Run an ESPHome action"
+      },
+      "titleFormatted": {
+        "en": "Run ESPHome action [[action]] with [[arguments]]"
+      },
+      "hint": {
+        "en": "Invokes a user-defined action declared under api: actions: in the device YAML. Arguments are a JSON object keyed by the variable names the action declares, for example {\"slot\": \"homey_t_line1\", \"value\": \"Hello\"}. Leave empty for an action that takes none."
+      },
+      "$filter": "capabilities=esphome_action",
+      "args": [
+        {
+          "name": "action",
+          "title": {
+            "en": "Action"
+          },
+          "type": "autocomplete"
+        },
+        {
+          "name": "arguments",
+          "title": {
+            "en": "Arguments (JSON)"
+          },
+          "type": "text",
+          "required": false,
+          "placeholder": {
+            "en": "{\"slot\": \"homey_t_line1\", \"value\": \"Hello\"}"
+          }
+        }
+      ]
+    },
+    {
+      "id": "esphome_display_text_set",
+      "title": {
+        "en": "Set a display text slot"
+      },
+      "titleFormatted": {
+        "en": "Set display slot [[slot]] to [[value]]"
+      },
+      "hint": {
+        "en": "Writes a Homey-fed text slot on the node. Writes are batched and the screen refreshes once."
+      },
+      "$filter": "capabilities=esphome_display",
+      "args": [
+        {
+          "name": "slot",
+          "title": {
+            "en": "Slot"
+          },
+          "type": "autocomplete"
+        },
+        {
+          "name": "value",
+          "title": {
+            "en": "Text"
+          },
+          "type": "text"
+        }
+      ]
+    },
+    {
+      "id": "esphome_display_number_set",
+      "title": {
+        "en": "Set a display number slot"
+      },
+      "titleFormatted": {
+        "en": "Set display slot [[slot]] to [[value]]"
+      },
+      "hint": {
+        "en": "Writes a Homey-fed numeric slot on the node. Writes are batched and the screen refreshes once."
+      },
+      "$filter": "capabilities=esphome_display",
+      "args": [
+        {
+          "name": "slot",
+          "title": {
+            "en": "Slot"
+          },
+          "type": "autocomplete"
+        },
+        {
+          "name": "value",
+          "title": {
+            "en": "Number"
+          },
+          "type": "number"
+        }
+      ]
+    },
+    {
+      "id": "esphome_display_value_set",
+      "title": {
+        "en": "Set a display slot from a sensor"
+      },
+      "titleFormatted": {
+        "en": "Set display slot [[slot]] to [[capability]] of [[source]]"
+      },
+      "hint": {
+        "en": "Reads a value from another ESPHome device and writes it to a numeric slot, labelling the slot with the unit Homey uses for that capability. Reads on demand, so it also suits readings that rarely change."
+      },
+      "$filter": "capabilities=esphome_display",
+      "args": [
+        {
+          "name": "slot",
+          "title": {
+            "en": "Slot"
+          },
+          "type": "autocomplete"
+        },
+        {
+          "name": "source",
+          "title": {
+            "en": "Sensor"
+          },
+          "type": "device"
+        },
+        {
+          "name": "capability",
+          "title": {
+            "en": "Value"
+          },
+          "type": "autocomplete"
+        }
+      ]
+    },
+    {
+      "id": "esphome_display_refresh",
+      "title": {
+        "en": "Refresh the display"
+      },
+      "hint": {
+        "en": "Flushes any pending slot writes and redraws the panel. A full ePaper refresh takes a few seconds."
+      },
+      "$filter": "capabilities=esphome_display"
     }
   ]
 }

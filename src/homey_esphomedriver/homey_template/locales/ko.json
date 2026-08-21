@@ -74,7 +74,8 @@
       "not_ready": "기기가 아직 Wi-Fi 설정을 할 준비가 되지 않았어요.",
       "ssid_too_long": "SSID 또는 비밀번호가 너무 길어요",
       "invalid_value": "Improv 기기가 잘못된 값을 보냈어요"
-    }
+    },
+    "unknown_action": "This ESPHome device has no action named \"__action__\". Check api: actions: in its YAML."
   },
   "nativeAppSuggestion": "좋은 소식이 있어요! 이 기기에는 전용 앱이 있어요! Homey 앱 스토어에서 __appName__을 검색해보세요."
 }

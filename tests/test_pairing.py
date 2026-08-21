@@ -65,11 +65,13 @@ def test_probe_retries_plaintext_when_psk_set(monkeypatch: pytest.MonkeyPatch) -
     )
     handler = _handler(noise_psk="secret")
 
-    device_info, entities, used_psk = asyncio.run(handler._probe())
+    device_info, entities, services, used_psk = asyncio.run(handler._probe())
 
     assert calls == ["secret", None]
     assert device_info is info
     assert entities == []
+    # the service list rides along: the Flow markers are derived from it
+    assert services == []
     assert used_psk is None
 
 
