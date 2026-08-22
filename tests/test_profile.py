@@ -212,3 +212,29 @@ class TestSettingEntities:
         )
         assert profile.skip_entity(entity("temp_offset")) is True
         assert profile.skip_entity(entity("temperature")) is False
+
+
+@pytest.mark.parametrize(
+    ("object_id", "hidden"),
+    [
+        ("debug_uptime", True),
+        ("debug_free_heap", True),
+        ("uptime", False),
+        ("wifi_signal", True),
+        ("wifi_signal_db", False),
+    ],
+)
+def test_hidden_entities_accepts_patterns(object_id: str, hidden: bool) -> None:
+    """A family of entities can be named once instead of enumerated.
+
+    Object ids are slugified to ``[a-z0-9_]``, so ``*``/``?``/``[`` cannot occur
+    in a literal id and are unambiguous as wildcards.
+    """
+    profile = BrandProfile.from_compose({"hiddenEntities": ["debug_*", "wifi_signal"]})
+    assert profile.skip_entity(entity(object_id)) is hidden
+
+
+def test_hidden_entities_without_patterns_still_matches_exactly() -> None:
+    profile = BrandProfile.from_compose({"hiddenEntities": ["relay"]})
+    assert profile.skip_entity(entity("relay")) is True
+    assert profile.skip_entity(entity("relay_2")) is False

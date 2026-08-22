@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Accept shell-style patterns in ``hiddenEntities``, so a family of entities can be hidden by ``debug_*`` rather than enumerated.
+
 ## [0.4.1] - 2026-08-28
 
 ### Fixed

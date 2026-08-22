@@ -70,7 +70,7 @@ Normally there is one Homey driver per product SKU. Product filters go on that d
 | `projects`               | Only allow specific firmware on this driver, for example `Brand.AQ-1`                                             |
 | `projectPrefix`          | Match all projects using a prefix such as `Brand.`. Less common, but useful when several products share a driver  |
 | `clientInfo`             | Name shown on the ESPHome device for the connected client, for example `Homey Brand`                              |
-| `hiddenEntities`         | Hide things like status LEDs, OTA helpers or duplicate sensors                                                    |
+| `hiddenEntities`         | Hide things like status LEDs, OTA helpers or duplicate sensors; an entry with `*`/`?`/`[` is a pattern             |
 | `deviceEntities`         | Map VOC, NOx, PM and similar entities to proper Homey capabilities instead of generic gauges                      |
 | `deviceClassOverrides`   | Force a Homey device class such as socket, sensor or speaker                                                      |
 | `settingEntities`        | Map a settings-page field onto an ESPHome entity, so writing the setting writes the entity                        |
@@ -78,6 +78,8 @@ Normally there is one Homey driver per product SKU. Product filters go on that d
 
 
 `settingEntities` exists because Homey device settings are declared statically in `driver.compose.json` — there is no API to add a field per device at pair time. A driver written for a known product can therefore declare the field itself and name the entity it configures, and core keeps the node in step with Homey's stored value: the entity is written when the setting changes, and once per connection when the node reports a value that disagrees. The mapped entity is left off the device tile, so the settings field is its only writer. Configuration entities (`entity_category: config` on the node) are the motivating case: a calibration offset belongs beside Host and Port rather than on the device tile. The generic `io.esphome` driver cannot use this, since it does not know in advance what it will pair with.
+
+`hiddenEntities` entries are object ids, except that an entry containing `*`, `?` or `[` is matched as a shell-style pattern. ESPHome slugifies object ids to `[a-z0-9_]`, so those characters cannot appear in a literal id and are unambiguous. A node that exposes a family of helpers — `debug_uptime`, `debug_free_heap`, and whatever the next firmware adds — is then hidden by `"debug_*"` once, rather than by a list that has to be revisited every time the node changes.
 
 If both `projects` and `projectPrefix` are configured, a match on either is enough.
 

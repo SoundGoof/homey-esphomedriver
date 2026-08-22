@@ -15,12 +15,23 @@ from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field, replace
+from fnmatch import fnmatchcase
 from typing import Any
 
 from aioesphomeapi import EntityInfo
 
 from homey_esphomedriver.display_slots import DisplaySlots
 from homey_esphomedriver.esphome_types import HomeyEspHomeDeviceOption
+
+
+def _is_pattern(entry: str) -> bool:
+    """Whether a ``hiddenEntities`` entry is a pattern rather than an id.
+
+    ESPHome object ids are slugified to ``[a-z0-9_]``, so these characters
+    cannot appear in a literal id and are unambiguous as wildcards.
+    """
+    return any(ch in entry for ch in "*?[")
+
 
 DEFAULT_CLIENT_INFO = "Homey ESPHome"
 """Identifies the generic Homey ESPHome app on the node's API hello."""
@@ -48,7 +59,13 @@ class BrandProfile:
     """
 
     hidden_entities: frozenset[str] = field(default_factory=frozenset)
-    """Extra entity object ids to omit, on top of diagnostic/config defaults."""
+    """Entity object ids to omit, on top of diagnostic/config defaults.
+
+    An entry containing ``*``, ``?`` or ``[`` is a shell-style pattern rather
+    than an id, so a family of entities can be named once: ``debug_*`` hides
+    every debug helper a node exposes, and stays correct when the node gains
+    another one.
+    """
 
     device_entities: Mapping[str, str] = field(default_factory=dict)
     """Entity object id to Homey capability id."""
@@ -199,7 +216,12 @@ class BrandProfile:
             return True
         # The settings page is a mapped entity's one writer; a tile control
         # beside it would be a second path to the same value.
-        return object_id in self.setting_entities.values()
+        if object_id in self.setting_entities.values():
+            return True
+        return any(
+            _is_pattern(entry) and fnmatchcase(object_id, entry)
+            for entry in self.hidden_entities
+        )
 
     def capability_id_for(self, entity: EntityInfo, default: str) -> str:
         """Return a remapped capability id, or ``default`` when unset."""
