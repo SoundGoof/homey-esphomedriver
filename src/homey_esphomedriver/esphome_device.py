@@ -42,7 +42,6 @@ from homey_esphomedriver.esphome_util import (
 )
 from homey_esphomedriver.profile import BrandProfile
 from homey_esphomedriver.settings import setting_matches
-from homey_esphomedriver.units import base_unit
 
 _UNREPORTED = object()
 """Marker for a write that is not answering a value the node reported."""
@@ -597,45 +596,6 @@ class EspHomeDevice(Device[EspHomeDriver]):
             kind: ``"text"`` or ``"number"``.
         """
         self.display_slot_writer.write(slot, value, kind=kind)
-
-    async def set_display_slot_from_capability(
-        self,
-        slot: str,
-        source: Any,
-        capability_id: str,
-    ) -> None:
-        """Write a device's current reading to a slot, labelled with its unit.
-
-        Pulling the value rather than receiving it from a trigger token means a
-        reading that rarely changes still reaches the panel: Homey fires
-        ``<capability>_changed`` on the rounded value, so a battery pinned at
-        100% never triggers at all.
-
-        The unit is written to the slot's companion text slot when the node
-        declares one, so the Flow never has to name a unit and remapping a slot
-        relabels it. Nodes that bake units into the layout simply have no such
-        slot and keep what they draw.
-
-        Args:
-            slot: Numeric slot object id.
-            source: Homey device to read from.
-            capability_id: Capability on that device.
-        """
-        value = source.get_capability_value(capability_id)
-        if value is None:
-            self.log(f"{capability_id} has no value on {source.get_name()} yet")
-            return
-
-        self.set_display_slot(slot, value, kind="number")
-
-        unit_slot = self.display_slots_config.unit_slot_of(slot)
-        # `display_slots` is empty while the node is offline, and the value
-        # above is queued rather than dropped — so skip the unit only when a
-        # live session says the node has no such slot, never merely because it
-        # is unreachable.
-        text_slots = self.display_slots("text")
-        if unit_slot is not None and (not text_slots or unit_slot in text_slots):
-            self.set_display_slot(unit_slot, base_unit(capability_id), kind="text")
 
     async def refresh_display(self) -> None:
         """Flush pending slot writes now and refresh the panel.

@@ -2538,42 +2538,6 @@
       ]
     },
     {
-      "id": "esphome_display_value_set",
-      "title": {
-        "en": "Set a display slot from a sensor"
-      },
-      "titleFormatted": {
-        "en": "Set display slot [[slot]] to [[capability]] of [[source]]"
-      },
-      "hint": {
-        "en": "Reads a value from another ESPHome device and writes it to a numeric slot, labelling the slot with the unit Homey uses for that capability. Reads on demand, so it also suits readings that rarely change."
-      },
-      "$filter": "capabilities=esphome_display",
-      "args": [
-        {
-          "name": "slot",
-          "title": {
-            "en": "Slot"
-          },
-          "type": "autocomplete"
-        },
-        {
-          "name": "source",
-          "title": {
-            "en": "Sensor"
-          },
-          "type": "device"
-        },
-        {
-          "name": "capability",
-          "title": {
-            "en": "Value"
-          },
-          "type": "autocomplete"
-        }
-      ]
-    },
-    {
       "id": "esphome_display_refresh",
       "title": {
         "en": "Refresh the display"

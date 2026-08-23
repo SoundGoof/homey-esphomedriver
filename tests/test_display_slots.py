@@ -80,29 +80,6 @@ class TestSlotKinds:
         assert slots.number_prefix == "homey_n_"  # untouched keys keep defaults
 
 
-class TestUnitSlots:
-    """A numeric slot's companion text slot, used to label its unit."""
-
-    @pytest.mark.parametrize(
-        ("object_id", "expected"),
-        [
-            ("homey_n_slot3_value", "homey_t_slot3_unit"),
-            # a numeric slot outside a tile has no caption or unit beside it
-            ("homey_n_slot3", None),
-            ("homey_n_primary", None),
-            # text slots label nothing themselves
-            ("homey_t_headline", None),
-            ("sht_temperature", None),
-        ],
-    )
-    def test_unit_slot_of(self, object_id: str, expected: str | None) -> None:
-        assert DisplaySlots().unit_slot_of(object_id) == expected
-
-    def test_suffix_is_configurable(self) -> None:
-        slots = DisplaySlots.from_compose({"unitSuffix": "_uom"})
-        assert slots.unit_slot_of("homey_n_slot1_value") == "homey_t_slot1_uom"
-
-
 class TestQueueing:
     async def test_writes_are_coalesced_into_one_refresh(self) -> None:
         rec = Recorder()

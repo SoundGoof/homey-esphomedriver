@@ -15,6 +15,12 @@ reconnect, because a Flow firing while the node sleeps or reboots must not be
 lost. Writes are **coalesced** into a single refresh, because a full GC16
 ePaper update takes about three seconds — six fields must not mean six
 refreshes.
+
+A reading's unit is written as a slot like any other value, never derived: a
+Homey Flow token delivers a bare number without the ``units`` string its source
+capability holds, so only the Flow author knows what the number measures. See
+https://github.com/athombv/homey-apps-sdk-issues/issues/455 — if tokens ever
+carry ``units``, unit slots can be fed from them instead.
 """
 
 from __future__ import annotations
@@ -26,8 +32,6 @@ from typing import Any, Protocol
 
 DEFAULT_TEXT_PREFIX = "homey_t_"
 DEFAULT_NUMBER_PREFIX = "homey_n_"
-DEFAULT_VALUE_SUFFIX = "_value"
-DEFAULT_UNIT_SUFFIX = "_unit"
 DEFAULT_COALESCE_SECONDS = 1.0
 
 MAX_FLUSH_ATTEMPTS = 5
@@ -77,12 +81,6 @@ class DisplaySlots:
     value_arg: str = "value"
     """Action variable carrying the value."""
 
-    value_suffix: str = DEFAULT_VALUE_SUFFIX
-    """Suffix a numeric slot may carry, so a tile's three slots read alike."""
-
-    unit_suffix: str = DEFAULT_UNIT_SUFFIX
-    """Suffix marking the text slot that labels a numeric slot's unit."""
-
     coalesce_seconds: float = DEFAULT_COALESCE_SECONDS
     """Window within which writes share one refresh."""
 
@@ -117,31 +115,10 @@ class DisplaySlots:
             refresh_action=str(
                 pick("refreshAction", "refresh_action") or "homey_refresh"
             ),
-            value_suffix=str(
-                pick("valueSuffix", "value_suffix") or DEFAULT_VALUE_SUFFIX
-            ),
-            unit_suffix=str(pick("unitSuffix", "unit_suffix") or DEFAULT_UNIT_SUFFIX),
             slot_arg=str(pick("slotArg", "slot_arg") or "slot"),
             value_arg=str(pick("valueArg", "value_arg") or "value"),
             coalesce_seconds=_coalesce_seconds(coalesce),
         )
-
-    def unit_slot_of(self, object_id: str) -> str | None:
-        """Return the text slot labelling ``object_id``, or None.
-
-        A tile names its three slots alike, so ``homey_n_slot3_value`` is
-        labelled by ``homey_t_slot3_unit``. A numeric slot that is not part of
-        a tile — one without the value suffix — has nothing to label and
-        returns None. The node need not declare the unit slot either; callers
-        check its slot list before writing, so a layout with units baked into
-        the design stays valid.
-        """
-        if not object_id.startswith(self.number_prefix):
-            return None
-        if not object_id.endswith(self.value_suffix):
-            return None
-        stem = object_id[len(self.number_prefix) : -len(self.value_suffix)]
-        return f"{self.text_prefix}{stem}{self.unit_suffix}"
 
     def kind_of(self, object_id: str) -> str | None:
         """Return ``"text"``, ``"number"``, or ``None`` for a non-slot entity."""

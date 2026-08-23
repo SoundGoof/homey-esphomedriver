@@ -7,7 +7,6 @@ from typing import TYPE_CHECKING, Any
 
 from homey_esphomedriver.display_slots import autocomplete_rows
 from homey_esphomedriver.esphome_util import parse_action_arguments
-from homey_esphomedriver.units import base_unit, is_measurement
 
 if TYPE_CHECKING:
     from homey_esphomedriver.esphome_driver import EspHomeDriver
@@ -115,12 +114,6 @@ class DriverFlowHandler:
             flow.get_action_card("esphome_display_number_set"),
             self._display_number_set,
             slot=self._display_number_slot_autocomplete,
-        )
-        self._wire_card(
-            flow.get_action_card("esphome_display_value_set"),
-            self._display_value_set,
-            slot=self._display_number_slot_autocomplete,
-            capability=self._source_capability_autocomplete,
         )
         self._wire_card(
             flow.get_action_card("esphome_display_refresh"),
@@ -258,33 +251,6 @@ class DriverFlowHandler:
             if needle in name.casefold()
         ]
 
-    async def _source_capability_autocomplete(
-        self,
-        query: str,
-        **args: Any,
-    ) -> list[dict[str, str]]:
-        """Offer the numeric capabilities of the device chosen in this card.
-
-        Homey passes the arguments filled in so far, so the list narrows to the
-        selected source. Readings are offered whether or not Homey defines a
-        unit for them — a handful pass their value through in the node's own
-        unit — and the label is appended only when there is one to append.
-        """
-        source = args.get("source")
-        if source is None:
-            return []
-
-        needle = query.casefold()
-        rows = []
-        for capability_id in source.get_capabilities():
-            if not is_measurement(capability_id):
-                continue
-            unit = base_unit(capability_id)
-            name = f"{capability_id} ({unit})" if unit else capability_id
-            if needle in name.casefold():
-                rows.append({"id": capability_id, "name": name})
-        return sorted(rows, key=lambda row: row["name"])
-
     async def _display_text_slot_autocomplete(
         self,
         query: str,
@@ -364,11 +330,6 @@ class DriverFlowHandler:
     async def _display_number_set(self, args: dict[str, Any], **_kwargs: Any) -> Any:
         args["device"].set_display_slot(
             args["slot"]["id"], args["value"], kind="number"
-        )
-
-    async def _display_value_set(self, args: dict[str, Any], **_kwargs: Any) -> Any:
-        return await args["device"].set_display_slot_from_capability(
-            args["slot"]["id"], args["source"], args["capability"]["id"]
         )
 
     async def _display_refresh(self, args: dict[str, Any], **_kwargs: Any) -> Any:
