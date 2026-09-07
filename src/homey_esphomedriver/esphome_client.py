@@ -72,6 +72,7 @@ class EspHomeClient:
         on_connected: Callable[[DeviceInfo], Awaitable[None]] | None = None,
         on_disconnected: Callable[[bool], Awaitable[None]] | None = None,
         on_connect_error: Callable[[Exception], Awaitable[None]] | None = None,
+        on_ready: Callable[[], Awaitable[None]] | None = None,
     ) -> None:
         """Create a session for one ESPHome node.
 
@@ -83,6 +84,11 @@ class EspHomeClient:
             expected_mac: Paired MAC; a mismatch stops reconnect at that address.
             client_info: Name shown on the node for this Homey client.
             deep_sleep: Treat disconnects as expected while the node is sleeping.
+            on_connected: Awaited after each login, before commands are allowed.
+            on_disconnected: Awaited when a live session drops.
+            on_connect_error: Awaited when a connection attempt fails.
+            on_ready: Awaited once the session accepts commands, after
+                ``on_connected`` returned with the session still up.
         """
         if not host:
             raise ValueError("ESPHome host is required")
@@ -97,12 +103,14 @@ class EspHomeClient:
         self._on_connected = on_connected
         self._on_disconnected = on_disconnected
         self._on_connect_error = on_connect_error
+        self._on_ready = on_ready
 
         self._on_state: StateCallback | None = None
         self._cli: APIClient | None = None
         self._reconnect: ReconnectLogic | None = None
         self._device_info: DeviceInfo | None = None
         self._state = SessionState.DISCONNECTED
+        self._entities_by_object_id: dict[str, EntityInfo] = {}
 
     @property
     def host(self) -> str:
@@ -204,6 +212,15 @@ class EspHomeClient:
         """List entities on the current connection."""
         return await self.api.list_entities_services()
 
+    def entity_info(self, object_id: str) -> EntityInfo | None:
+        """Return the entity info for an object id, or ``None`` if absent.
+
+        Commands address entities by key, but a driver profile names them by
+        object id, the stable identifier a YAML author controls. The info
+        rather than the key alone, because the command depends on the domain.
+        """
+        return self._entities_by_object_id.get(object_id)
+
     def _create_client(self) -> APIClient:
         """Build a fresh APIClient from the current endpoint settings."""
         return APIClient(
@@ -238,6 +255,7 @@ class EspHomeClient:
         reconnect = self._reconnect
         self._reconnect = None
         self._state = SessionState.DISCONNECTED
+        self._entities_by_object_id = {}
 
         if reconnect is not None:
             await reconnect.stop()
@@ -250,8 +268,13 @@ class EspHomeClient:
         """Re-subscribe and refresh device info whenever ReconnectLogic logs in."""
         cli = self.api
         try:
-            device_info, _, _ = await cli.device_info_and_list_entities()
+            device_info, entities, _ = await cli.device_info_and_list_entities()
             self._device_info = device_info
+            # Entity keys are per-connection: the node may be reflashed with
+            # a different set while paired, so rebuild rather than merge.
+            self._entities_by_object_id = {
+                entity.object_id: entity for entity in entities
+            }
             self._name = device_info.name
             self._deep_sleep = device_info.has_deep_sleep
             reconnect = self._reconnect
@@ -270,9 +293,12 @@ class EspHomeClient:
         if self._on_connected is not None:
             await self._on_connected(device_info)
         self._mark_ready()
+        if self._state is SessionState.READY and self._on_ready is not None:
+            await self._on_ready()
 
     async def _handle_disconnect(self, expected_disconnect: bool) -> None:
         self._state = SessionState.DISCONNECTED
+        self._entities_by_object_id = {}
         # Stopping the session closes the socket; that is not a Homey unavailable.
         if self._on_state is None:
             return

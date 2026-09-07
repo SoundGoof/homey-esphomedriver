@@ -84,6 +84,7 @@ Product identity lives on the Homey driver like Zigbee `productId`: an `esphome`
 | `hiddenEntities`       | `hidden_entities`           | Hide extra entities (status LED, OTA helpers)    |
 | `deviceEntities`       | `device_entities`           | Remap an entity to a Homey capability            |
 | `deviceClassOverrides` | `device_class_overrides`    | Force Homey class from an entity id              |
+| `settingEntities`      | `setting_entities`          | Back a settings field with an entity             |
 
 
 Omit `projects` / `projectPrefix` to accept every project (`io.esphome`). If both are set, either match is enough.

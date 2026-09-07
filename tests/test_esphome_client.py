@@ -71,6 +71,61 @@ def test_on_connected_awaited_before_ready() -> None:
     asyncio.run(run())
 
 
+def test_on_ready_runs_once_commands_are_allowed() -> None:
+    """``on_ready`` sees a READY session; ``on_connected`` never does."""
+    seen: list[str] = []
+
+    async def on_connected(_info: DeviceInfo) -> None:
+        seen.append(f"connected:{client.available}")
+
+    async def on_ready() -> None:
+        seen.append(f"ready:{client.available}")
+        client.command("light_command", key=1)
+
+    async def run() -> None:
+        client._on_state = AsyncMock()
+        client._reconnect = MagicMock()
+        api = MagicMock()
+        api.device_info_and_list_entities = AsyncMock(
+            return_value=(DeviceInfo(name="node"), [], [])
+        )
+        client._cli = api
+
+        await client._handle_connect()
+
+        assert seen == ["connected:False", "ready:True"]
+        api.light_command.assert_called_once_with(key=1)
+
+    client = _client(on_connected=on_connected, on_ready=on_ready)
+    asyncio.run(run())
+
+
+def test_on_ready_skipped_when_session_dropped_during_on_connected() -> None:
+    """A drop inside ``on_connected`` leaves commands blocked; nothing is ready."""
+
+    async def on_connected(_info: DeviceInfo) -> None:
+        client._state = SessionState.DISCONNECTED
+
+    on_ready = AsyncMock()
+
+    async def run() -> None:
+        client._on_state = AsyncMock()
+        client._reconnect = MagicMock()
+        api = MagicMock()
+        api.device_info_and_list_entities = AsyncMock(
+            return_value=(DeviceInfo(name="node"), [], [])
+        )
+        client._cli = api
+
+        await client._handle_connect()
+
+        assert client.state is SessionState.DISCONNECTED
+        on_ready.assert_not_called()
+
+    client = _client(on_connected=on_connected, on_ready=on_ready)
+    asyncio.run(run())
+
+
 def test_stop_suppresses_disconnect_hook() -> None:
     """``stop()`` clears ``_on_state`` so teardown does not call ``on_disconnected``."""
 

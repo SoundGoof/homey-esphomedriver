@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import math
 from typing import Any, cast
 
 from aioesphomeapi import EntityState, SensorState
@@ -10,7 +9,7 @@ from aioesphomeapi import EntityState, SensorState
 from homey_esphomedriver.entities.state.base import (
     AbstractEntityStateUpdateHandler,
 )
-from homey_esphomedriver.esphome_util import format_uptime
+from homey_esphomedriver.esphome_util import format_uptime, is_missing_number
 from homey_esphomedriver.units import convert_units
 
 
@@ -18,7 +17,7 @@ class SensorEntityStateUpdateHandler(AbstractEntityStateUpdateHandler):
     async def handle(self, state: EntityState, capabilities: list[str]) -> None:
         capability = capabilities[0]
         sensor = cast(SensorState, state)
-        if sensor.missing_state or _is_missing_number(sensor.state):
+        if sensor.missing_state or is_missing_number(sensor.state):
             self.set_capability_value(capability, None)
             return
 
@@ -41,8 +40,3 @@ class SensorEntityStateUpdateHandler(AbstractEntityStateUpdateHandler):
 
         capability_value = convert_units(self.device, capability, capability_value)
         self.set_capability_value(capability, capability_value)
-
-
-def _is_missing_number(value: float) -> bool:
-    """ESPHome may leave NaN when a reading is not yet available."""
-    return math.isnan(value)

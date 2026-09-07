@@ -2,11 +2,39 @@
 
 from __future__ import annotations
 
-from typing import Any
+from collections.abc import Callable
+from typing import TYPE_CHECKING, Any
 
 from aioesphomeapi import ClimateMode
 
 from homey_esphomedriver.entities.commands.base import AbstractEntityCommandHandler
+
+if TYPE_CHECKING:
+    from homey_esphomedriver.esphome_client import EspHomeClient
+
+WRITE_COMMANDS: dict[str, tuple[str, Callable[[Any], Any]]] = {
+    "number": ("number_command", float),
+    "select": ("select_command", str),
+    "switch": ("switch_command", bool),
+}
+"""Native API write command per entity domain, with the coercion its state takes.
+
+Shared by the capability listeners and by settings-page fields mapped onto an
+entity, so the two paths cannot drift on how a domain is written.
+"""
+
+
+def write_entity_value(
+    client: EspHomeClient, domain: str, key: int, value: Any
+) -> None:
+    """Send ``value`` to the entity ``key`` of ``domain``.
+
+    Raises:
+        KeyError: If the domain has no write command.
+        TypeError, ValueError: If the value cannot be coerced for the domain.
+    """
+    name, coerce = WRITE_COMMANDS[domain]
+    client.command(name, key, coerce(value))
 
 
 class GenericEntityCommandHandler(AbstractEntityCommandHandler):
@@ -55,7 +83,7 @@ class GenericEntityCommandHandler(AbstractEntityCommandHandler):
             client.command("siren_command", key, state=bool(value))
             return
         if entity_type == "switch":
-            client.command("switch_command", key, bool(value))
+            write_entity_value(client, "switch", key, value)
             return
 
         raise ValueError(f"Unsupported entity type for onoff: {entity_type}")
@@ -72,10 +100,11 @@ class GenericEntityCommandHandler(AbstractEntityCommandHandler):
         capability_id: str,
         **_kwargs: Any,
     ) -> None:
-        self._require_client().command(
-            "number_command",
+        write_entity_value(
+            self._require_client(),
+            "number",
             self._get_entity_key(capability_id),
-            float(value),
+            value,
         )
 
     async def select(
@@ -85,8 +114,9 @@ class GenericEntityCommandHandler(AbstractEntityCommandHandler):
         capability_id: str,
         **_kwargs: Any,
     ) -> None:
-        self._require_client().command(
-            "select_command",
+        write_entity_value(
+            self._require_client(),
+            "select",
             self._get_entity_key(capability_id),
-            str(value),
+            value,
         )

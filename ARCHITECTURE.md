@@ -73,7 +73,10 @@ Normally there is one Homey driver per product SKU. Product filters go on that d
 | `hiddenEntities`         | Hide things like status LEDs, OTA helpers or duplicate sensors                                                    |
 | `deviceEntities`         | Map VOC, NOx, PM and similar entities to proper Homey capabilities instead of generic gauges                      |
 | `deviceClassOverrides`   | Force a Homey device class such as socket, sensor or speaker                                                      |
+| `settingEntities`        | Map a settings-page field onto an ESPHome entity, so writing the setting writes the entity                        |
 
+
+`settingEntities` exists because Homey device settings are declared statically in `driver.compose.json` — there is no API to add a field per device at pair time. A driver written for a known product can therefore declare the field itself and name the entity it configures, and core keeps the node in step with Homey's stored value: the entity is written when the setting changes, and once per connection when the node reports a value that disagrees. The mapped entity is left off the device tile, so the settings field is its only writer. Configuration entities (`entity_category: config` on the node) are the motivating case: a calibration offset belongs beside Host and Port rather than on the device tile. The generic `io.esphome` driver cannot use this, since it does not know in advance what it will pair with.
 
 If both `projects` and `projectPrefix` are configured, a match on either is enough.
 

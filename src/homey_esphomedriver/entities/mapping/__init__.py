@@ -181,7 +181,7 @@ def celsius_step(unit: TemperatureUnit | None, step: float) -> float:
     return step
 
 
-def _entity_domain(entity: EntityInfo | None) -> str | None:
+def entity_domain(entity: EntityInfo | None) -> str | None:
     """Snake-case domain from ``LightInfo`` → ``light``."""
     if entity is None:
         return None
@@ -423,7 +423,7 @@ class DeviceEntityMapper:
         if capability_options:
             options.update(capability_options)
         if "entity_type" not in options:
-            domain = _entity_domain(_current_entity)
+            domain = entity_domain(_current_entity)
             if domain is not None:
                 options["entity_type"] = domain
         if "." in capability and "title" not in options and _current_entity is not None:

@@ -61,6 +61,22 @@ class BrandProfile:
     capability_overrides: Mapping[tuple[str, str], str] = field(default_factory=dict)
     """``(object_id, default_capability_id)`` to capability id. Python-only."""
 
+    setting_entities: Mapping[str, str] = field(default_factory=dict)
+    """Homey settings key to ESPHome entity object id.
+
+    Homey device settings are declared statically in ``driver.compose.json``;
+    there is no API to add a field per device at pair time. A driver that ships
+    for a known product can therefore declare a settings field and name the
+    entity it writes to. Homey's stored value is authoritative: the entity is
+    written when the setting changes, and once per connection when the node
+    reports a value that disagrees. A mapped entity is left off the device
+    tile, so the setting is its only writer. Suits configuration entities — a
+    calibration offset belongs beside Host and Port rather than on the tile.
+
+    Field type follows the entity: a ``number`` field for a ``number`` entity, a
+    ``dropdown`` for a ``select``, a ``checkbox`` for a ``switch``.
+    """
+
     @classmethod
     def from_manifest(cls, manifest: Mapping[str, Any] | None) -> BrandProfile:
         """Build a profile from a Homey driver manifest's ``esphome`` object.
@@ -127,6 +143,9 @@ class BrandProfile:
             capability_overrides=_capability_overrides(
                 _pick(data, "capabilityOverrides", "capability_overrides")
             ),
+            setting_entities=_string_map(
+                _pick(data, "settingEntities", "setting_entities") or {}
+            ),
         )
 
     def replace(self, **kwargs: object) -> BrandProfile:
@@ -163,7 +182,12 @@ class BrandProfile:
 
     def skip_entity(self, entity: EntityInfo) -> bool:
         """Return whether the brand wants this entity omitted from the Homey device."""
-        return entity.object_id in self.hidden_entities
+        object_id = entity.object_id
+        if object_id in self.hidden_entities:
+            return True
+        # The settings page is a mapped entity's one writer; a tile control
+        # beside it would be a second path to the same value.
+        return object_id in self.setting_entities.values()
 
     def capability_id_for(self, entity: EntityInfo, default: str) -> str:
         """Return a remapped capability id, or ``default`` when unset."""

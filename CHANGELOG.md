@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Add a ``settingEntities`` compose key mapping a settings-page field onto an ESPHome entity, written when the setting changes and reconciled when the node disagrees.
+
 ## [0.4.1] - 2026-08-28
 
 ### Fixed

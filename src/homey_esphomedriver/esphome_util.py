@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import math
 from collections.abc import Callable
 from datetime import datetime
 
@@ -81,6 +82,11 @@ def is_debug_enabled() -> bool:
 
     value = Homey.env.get("DEBUG")
     return isinstance(value, str) and value.strip().lower() in _DEBUG_TRUE
+
+
+def is_missing_number(value: float) -> bool:
+    """ESPHome leaves NaN when a numeric value is not yet available."""
+    return math.isnan(value)
 
 
 def debug_log(log: Callable[..., None], *args: object) -> None:
